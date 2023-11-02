@@ -1,3 +1,11 @@
+"""
+Todo:
+- Check Move function to make sure it works fine.
+- Create a function that creates a random or given total state (plane with cells with random agents in it) to be able to
+ model the question properly.
+- Put the functions that we have created into Logic.
+- Put our functions into propositions into bauhaus with propositions.
+"""
 import math
 import random
 
@@ -12,6 +20,15 @@ config.sat_backend = "kissat"
 # Encoding that will store all of your constraints
 E = Encoding()
 
+"""
+This controls various probabilities in the problem for each individual agent, which may be changed depending on what
+you may want the simulation to look like. 
+transmissionProb controls how likely each agent (in the same cell) is going to transmit the disease if there is at least 
+one diseased in the same cell. 
+deadProb controls how likely some agent with the disease is going to die. 
+moveProb is how likely the agent is going to move to another grid as long as they are alive.
+maxSteps controls how long the simulation is going to run for, it will be used as a time step. 
+"""
 transmissionProb = 0.1
 deadProb = 0.5
 moveProb = 0.5
@@ -75,20 +92,39 @@ def example_theory():
 
     return E
 
-class cell:
 
+class cell:
+    """
+    The cell class controls various properties about the cell including adding/removing agents and counting the various
+    properties inside a cell such as transmission and death. The cell itself just stores the list of agents inside the
+    cell and stores where it is located in the grid using its x and y values in the grid.
+    """
     def __init__(self):
         self.agentlist = []
         self.x = None
         self.y = None
 
     def addAgents(self, newAgent):
+        """
+        Adds an agent to a cell.
+        :param newAgent: Should be of type agent.
+        :return: None
+        """
         self.agentlist.append(newAgent)
 
     def removeAgents(self, newAgent):
+        """
+        Removes an agent from a cell
+        :param newAgent: Should be of type agent, and be currently in the cell.
+        :return: None
+        """
         self.agentlist.remove(newAgent)
 
     def countInfected(self):
+        """
+        Counts the amount of infected agents in a cell.
+        :return: The number of infected in that cell (Integer)
+        """
         numInfected = 0
         for i in self.agentlist:
             if i.infected:
@@ -96,6 +132,10 @@ class cell:
         return numInfected
 
     def countAlive(self):
+        """
+        Counts the amount of alive agents in a cell.
+        :return: The number of alive in that cell (Integer)
+        """
         for i in self.agentlist:
             numAlive = 0
             if i.alive == True:
@@ -103,6 +143,10 @@ class cell:
         return numAlive
 
     def countDead(self):
+        """
+        Counts the amount of dead agents in a cell.
+        :return: The number of dead in that cell (Integer)
+        """
         numDead = 0
         for i in self.agentlist:
             if i.dead == True:
@@ -110,6 +154,11 @@ class cell:
         return numDead
 
     def transmission(self):
+        """
+        Goes through each alive and non-infected agent in a cell and makes the agents get infected based off the
+        transmission probability defined above.
+        :return: None
+        """
         numInfected = self.countInfected()
         numAlive = self.countAlive()
 
@@ -120,6 +169,10 @@ class cell:
                         x.Infected = True
                         
     def dead(self):
+        """
+        Goes through all alive and infected agents and makes them dead based off the dead probability as defined above.
+        :return: None
+        """
         numInfected = self.countInfected()
         numAlive = self.countAlive()
 
@@ -132,7 +185,13 @@ class cell:
     def __str__(self):
         return self.agentlist.__str__()
 
+
 class agent:
+    """
+    The agent class controls the properties about an individual agent such as name (numbered list), if they are infected,
+    alive, or immune. There is a implied constraint on the agent as they cannot be both infected and not infected at
+    the same time. The same thing is implied with alive and immune.
+    """
     def __init__(self, name, infected, alive, immune):
         self.name = name
         self.infected = infected
@@ -147,7 +206,16 @@ class agent:
 
 
 class plane:
+    """
+    The plane class creates a square plane made up of the amount of cells^2, this class also controls the movement of
+    individual agents moving from cell to cell.
+    """
     def __init__(self, cells):
+        """
+        Creates a plane which is a square of cells.
+        :param cells: the amount of cells will be in the plane in the x direction and y direction, i.e makes a square
+        of cells.
+        """
         cellSquare = int(math.sqrt(len(cells)))
         tempPlaneArray = [[0] * cellSquare for _ in range(cellSquare)]
 
@@ -161,6 +229,10 @@ class plane:
         self.planeArray = tempPlaneArray
 
     def __str__(self):
+        """
+        This is a test function to print out to see if the plane works
+        :return: The infected people in the plane.
+        """
         arr = [[0] * len(self.planeArray[0]) for _ in range(len(self.planeArray))]
         for i in range(len(self.planeArray)):
             for j in range(len(self.planeArray[0])):
@@ -169,6 +241,13 @@ class plane:
         return arr.__str__()
 
     def move(self, cell):
+        """
+        Based on the moveProb moves the agent to a random valid cell around it. (keeps going until a valid cell is
+        found). The move table gives all possibilities where an agent can move and randomly moves the agent to a vaild
+        space.
+        :param cell: The cell that the agents will move from. type cell.
+        :return: None
+        """
         moveTable = {
             0: [-1, 1],
             1: [0, 1],
