@@ -13,18 +13,17 @@ config.sat_backend = "kissat"
 # Encoding that will store all of your constraints
 E = Encoding()
 
-# the virtual area we are simulating
-simulated_plane = []
-for x in range(0, 25):
-    simulated_plane.append([])
+agents = [(True, False, False, 0, 0, 0), # alive, not infected, not immune
+          (True, True, False, 0, 0, 0), # alive, infected, not dead
+          (False, True, False, 0, 0, 0),# not alive, infected, not immune
+          (True, False, True, 0, 0, 0)]# alive, not infected, immune
 
+ToF = (True, False)
 
 # universal constants
-transmissionProb = 0.1
-deadProb = 0.5
-moveProb = 0.5
-maxSteps = 10000
-
+maxTime = 3
+planeMaxX = 2
+planeMaxY = 2
 
 class Hashable:
     def __hash__(self):
@@ -36,93 +35,80 @@ class Hashable:
     def __repr__(self):
         return str(self)
 
+
 #repersents a individal in our simulation
 @proposition(E)
 class agent_node(Hashable):
-    def __init__(self, alive, infected, immune, plane, x, y):
+    def __init__(self, alive, infected, immune):
         self.infected = infected
         self.alive = alive
         self.immune = immune
-        self.x = x
-        self.y = y
-        plane[x + 4 * y].append(self)
-
-    # get status of agent
-    def getStatus(self):
-        if (self.infected == True):
-            if (self.alive == False):
-                return '(I)'
-        elif (self.alive == True):
-            if (self.infected == False):
-                return '(A)'
-        if (self.alive == False):
-            return '(D)'
-    # moves the agent
-    def agentMove(self, dx, dy, simulated_plane):
-        simulated_plane[dx + dy * 5].append(self)
-        simulated_plane[self.x + self.y * 5].remove(self)
-        self.x = dx
-        self.y = dy
 
     def __repr__(self):
-        return f'[alive = {self.alive} infected = {self.infected}, immune = {self.immune}]'
+        return f'[alive = {self.alive}, infected = {self.infected}, immune = {self.immune}\n]'
 
-# used to print the individual cel
-def printCel(cel):
-    print('[', end="")
-    for x in range(len(cel)):
-        print(cel[x].getStatus(), end="");
-    print(']', end="")
 
-# used to print the simulated plane
-def printPlane(simulated_plane):
-    print('----------------------------')
-    for i in range(0, 25, 5):
-        printCel(simulated_plane[i])
-        printCel(simulated_plane[i + 1])
-        printCel(simulated_plane[i + 2])
-        printCel(simulated_plane[i + 3])
-        printCel(simulated_plane[i + 4])
-        print('\n')
-    print('----------------------------')
+#repersents an individal's time and space
+@proposition(E)
+class timeAndLocation(Hashable):
+    def __init__(self, agent, time, x, y):
+        self.x = x
+        self.y = y
+        self.time = time
+        self.agent = agent
 
-# stores all agents
-agents = []
-p1 = agent_node(False, False, True, simulated_plane, 0, 0)
-p2 = agent_node(False, True, False, simulated_plane, 0, 0)
+        def __repr__(self):
+            return f'[node: {self.agent}\n time: {self.time}, location: ({self.x},{self.y})]'
 
-# add 2 new agents to list
-agents.append(p1)
-agents.append(p2)
 
-# does not work, will investigate later
-# documentation is confusing!
+# this will be true if the population is guaranteed to die
+@proposition(E)
+class populationDeath(Hashable):
+    def __init__(self):
+        pass
+
+    def __repr__(self):
+        return f'[The population will die]'
+
+
+
+#Initalize Proposition
+agentsProposition = []
+
+for i in range(len(agents)):
+                for alive in ToF:
+                    for infected in ToF:
+                        for immune in ToF:
+                            agentsProposition.append(agent_node(alive, infected, immune))
+
+agentTimeAndSpace = []
+for agent in agentsProposition:
+    for t in maxTime:
+        for x in planeMaxX:
+            for y in planeMaxY:
+                agentTimeAndSpace.append(timeAndLocation(agent, t, x, y))
+
+demise = populationDeath()
+
+# constraints
 def test_theory():
-    # for every cel
-    for i in simulated_plane:
-        # for every agent of the cell
-        for j in agents:
-            # every agent must not be both immune and infected
-            constraint.add_at_least_one(E, agents, agent_node(True, True, True), agent_node(False, True, True))
-            # if an agent is immune, it implies they are not infected
-            E.add_constraint(agents.immune >> ~agents.infected)
-            # if an agent is not alive, this implies they are not immune
-            E.add_constraint(agents.alive >> ~agents.immune)
+    #agent cannot be infected and immune
+    for agent in agentsProposition:
+        # agent cannot be infected and immune at the same time
+        # agent_node(alive, infected, immune)
+        E.add_constraint(~((agent_node(True, False, True)|agent_node(False, False, True))&
+                           (agent_node(True, True, False)|agent_node(False, True, False))))
+
     return E
-
-
 if __name__ == "__main__":
-
-    #prints vitual plane
-    printPlane(simulated_plane)
 
     #applie restriction and compile
     T = test_theory()
     T = T.compile()
 
-    # print results
-    print("\nSatisfiable: %s" % T.satisfiable())
+    #print results
+    #print("\nSatisfiable: %s" % T.satisfiable())
 
     print("# Solutions: %d" % count_solutions(T))
 
-    print("   Solution: %s" % T.solve())
+    #print("   Solution: %s" % T.solve())
