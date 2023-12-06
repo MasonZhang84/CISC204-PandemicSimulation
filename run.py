@@ -1,10 +1,35 @@
+import math
+import random
 
 from bauhaus import Encoding, proposition, constraint
 from bauhaus.utils import count_solutions, likelihood
+from nnf import Var
+
 
 # These two lines make sure a faster SAT solver is used.
 from nnf import config
+
 config.sat_backend = "kissat"
+
+# Encoding that will store all of your constraints
+E = Encoding()
+
+agents = [(True, False,0,0),
+          (True, False, 0,0),
+          (False, False, 2,2),
+          (True, True, 3,3),
+          (True, True, 0,1),
+          (False, True, 2, 2),
+          (True, True, 3, 3)]
+
+
+ToF = (True, False)
+
+# universal constants
+maxTime = 200
+planeMaxX = 3
+planeMaxY = 3
+lethality = 2
 
 class Hashable:
     def __hash__(self):
@@ -16,101 +41,163 @@ class Hashable:
     def __repr__(self):
         return str(self)
 
-# Encoding that will store all of your constraints
-E = Encoding()
 
-# To create propositions, create classes for them first, annotated with "@proposition" and the Encoding
+#repersents a individal in our simulation
 @proposition(E)
-class BasicPropositions:
-
-    def __init__(self, data):
-        self.data = data
+class agent_node:
+    def __init__(self, alive, infected):
+        self.infected = infected
+        self.alive = alive
 
     def __repr__(self):
-        return f"A.{self.data}"
+        return f'[alive = {self.alive}, infected = {self.infected}]'
 
 
-# Different classes for propositions are useful because this allows for more dynamic constraint creation
-# for propositions within that class. For example, you can enforce that "at least one" of the propositions
-# that are instances of this class must be true by using a @constraint decorator.
-# other options include: at most one, exactly one, at most k, and implies all.
-# For a complete module reference, see https://bauhaus.readthedocs.io/en/latest/bauhaus.html
-@constraint.at_least_one(E)
+#repersents an individal's time and space
 @proposition(E)
-class FancyPropositions:
-
-    def __init__(self, data):
-        self.data = data
+class timeAndLocation:
+    def __init__(self, agent, time, x, y):
+        self.x = x
+        self.y = y
+        self.time = time
+        self.agent = agent
 
     def __repr__(self):
-        return f"A.{self.data}"
-
-# Call your variables whatever you want
-a = BasicPropositions("a")
-b = BasicPropositions("b")
-c = BasicPropositions("c")
-d = BasicPropositions("d")
-e = BasicPropositions("e")
-# At least one of these will be true
-x = FancyPropositions("x")
-y = FancyPropositions("y")
-z = FancyPropositions("z")
+        return f'[node = {self.agent}, time: {self.time}, location: ({self.x},{self.y})]'
 
 
-# Build an example full theory for your setting and return it.
-#
-#  There should be at least 10 variables, and a sufficiently large formula to describe it (>50 operators).
-#  This restriction is fairly minimal, and if there is any concern, reach out to the teaching staff to clarify
-#  what the expectations are.
-def example_theory():
-    # Add custom constraints by creating formulas with the variables you created.
-    E.add_constraint((a | b) & ~x)
-    # Implication
-    E.add_constraint(y >> z)
-    # Negate a formula
-    E.add_constraint(~(x & y))
-    # You can also add more customized "fancy" constraints. Use case: you don't want to enforce "exactly one"
-    # for every instance of BasicPropositions, but you want to enforce it for a, b, and c.:
-    constraint.add_exactly_one(E, a, b, c)
+# this will be true if the population is guaranteed to die
+@proposition(E)
+class populationDeath:
+    def __init__(self):
+        pass
+
+    def __repr__(self):
+        return f'[The population will die]'
+
+#(self, agent, time, x, y)
+def move_agent(agent):
+
+    temp = timeAndLocation(agent.agent, agent.time, agent.x, agent.y)
+
+    # If person is dead, they cannot move
+    if agent.agent.alive == False:
+        temp.time = temp.time + 1
+        return temp
+
+    # Define possible movements: up, down, left, right
+    movements = [(0, 1), (0, -1), (-1, 0), (1, 0)]
+
+    while True:
+        # Randomly choose a movement
+        dx, dy = random.choice(movements)
+
+        # Calculate new position
+        new_x = temp.x + dx
+        new_y = temp.y + dy
+
+        # If new position is out of bounds, choose another movement
+        if new_x < 0 or new_x > planeMaxX or new_y < 0 or new_y > planeMaxY:
+            continue
+
+        # Update agent's position
+        temp.x = new_x
+        temp.y = new_y
+        temp.time = temp.time + 1
+
+        return temp
+
+def infect(agents):
+    infect = False
+
+    infectZone = []
+
+    for i in agents:
+        if i.agent.infected == True:
+            infect = True
+            if (i.x, i.y) not in infectZone:
+                infectZone.append((i.x, i.y))
+
+    if infect:
+        for zone in infectZone:
+            for i in agents:
+                if i.agent.alive == True:
+                    if i.x == zone[0] and i.y == zone[1]:
+                        i.agent.infected = True
+
+def death(population, t):
+    for i in range(len(population[-1])):
+        if population[-1][i].agent.infected == True:
+            if t >= lethality and population[t-lethality][i].agent.infected == True:
+                population[-1][i].alive = False
+
+
+print("tyest")
+
+#Initalize Proposition
+agentsProposition = []
+simulatuionStates = []
+
+currentState = []
+
+for i in agents:
+    agentsProposition.append(agent_node(i[0],i[1]))
+    currentState.append(timeAndLocation(agent_node(i[0],i[1]),0,i[2], i[3]))
+
+simulatuionStates.append(currentState)
+
+demise = populationDeath()
+
+# constraints
+def test_theory():
+
+    #agent cannot be infected and immune
+    for agent in agentsProposition:
+        # agent cannot be infected and immune at the same time
+        # agent_node(alive, infected, immune)
+        E.add_constraint(~((agent_node(True, False, True)|agent_node(False, False, True))&
+                           (agent_node(True, True, False)|agent_node(False, True, False))))
 
     return E
 
+if __name__ == "__main__":
+
+    t = 1
+
+    while t <= maxTime:
+        currentState = []
+
+        infect(currentState)
+
+        #move agent
+        for agent in simulatuionStates[t-1]:
+            currentState.append(move_agent(agent))
+
+        # if they share cell, infect everyone in the cell
+
+        death(simulatuionStates, t)
+
+        simulatuionStates.append(currentState)
+        # increase time
+        t = t + 1
 
 
 
-if __name__=="__main__":
-    print('hello')
-    T = example_theory()
-    # Don't compile until you're finished adding all your constraints!
-    T = T.compile()
-    # After compilation (and only after), you can check some of the properties
-    # of your model:
-    print("\nSatisfiable: %s" % T.satisfiable())
-    print("# Solutions: %d" % count_solutions(T))
-    print("   Solution: %s" % T.solve())
+    print(len(simulatuionStates))
+    for i in simulatuionStates:
+        print("--------------------------------------")
+        for j in i:
+            print(j)
 
-    print("\nVariable likelihoods:")
-    for v, vn in zip([a,b,c,x,y,z], 'abcxyz'):
-        # Ensure that you only send these functions NNF formulas
-        # Literals are compiled to NNF here
-        print(" %s: %.2f" % (vn, likelihood(T, v)))
-    print()
+    #applie restriction and compile
+    #T = test_theory()
+    #T = T.compile()
 
-rows, cols = (3, 3)
-arr = [[0]*cols]*rows
+    #print("\nSatisfiable: %s" % T.satisfiable())
 
-class plane:
-    def __init__(self):
-        agentlist = []
+    #print("# Solutions: %d" % count_solutions(T))
 
-    def addAgents(self, newAgent):
-        self.agentlist.append(newAgent)
+    #print("   Solution: %s" % T.solve())
 
-
-class agent:
-    def __init__(self, name, infected, alive, immune):
-        self.name = name
-        self.infected = infected
-        self.alive = alive
-        self.immune = immune
+    # Call the function with your simulation states
 
