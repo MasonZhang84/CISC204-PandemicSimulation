@@ -223,7 +223,7 @@ if __name__ == "__main__":
         currentState = []
 
         #move agent and if they share cell, infect everyone in the cell
-        for agent in simulationStates[t - 1]:
+        for agent in simulationStates[t-1]:
             currentState.append(move_agent(agent))
 
         infect(currentState)
